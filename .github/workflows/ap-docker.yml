@@ -1,0 +1,92 @@
+name: Daily Update
+
+on:
+  schedule:
+    - cron: '5 1 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update README with timestamp
+        id: update_readme
+        run: |
+          UTC_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')
+          BJ_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
+
+          TIMESTAMP_SECTION="\n## 🕒 最后更新时间\n\n"
+          TIMESTAMP_SECTION+="**UTC**: \`$UTC_TIME\`  \n"
+          TIMESTAMP_SECTION+="**北京时间**: \`$BJ_TIME\`  \n\n"
+          TIMESTAMP_SECTION+="> ⚡ 此时间戳由 GitHub Actions 自动更新\n"
+
+          if grep -q "## 🕒 最后更新时间" README.md; then
+            sed -i '/## 🕒 最后更新时间/,/^## \|^# /{//!d}' README.md
+            sed -i '/## 🕒 最后更新时间/d' README.md
+          fi
+
+          echo -e "$TIMESTAMP_SECTION" >> README.md
+
+      - name: Get diff summary
+        id: diff
+        run: |
+          # 获取本次修改的 diff 摘要
+          DIFF_MSG=$(git diff --staged -- README.md || git diff README.md)
+
+          # 防止 Telegram markdown 崩坏：替换特殊符号
+          SAFE_DIFF=$(printf "%s\n" "$DIFF_MSG" | sed -e 's/`/\\`/g' -e 's/_/\\_/g' -e 's/*/\\*/g')
+
+          echo "diff<<EOF" >> $GITHUB_OUTPUT
+          echo "$SAFE_DIFF" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Auto commit changes
+        id: commit
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto update README timestamp"
+          file_pattern: README.md
+
+      # -----------------------------
+      # Telegram 推送成功消息
+      # -----------------------------
+      - name: Send Telegram Success Notification
+        if: success()
+        run: |
+          MESSAGE="🎉 *GitHub Actions 成功运行！*\n\n\
+📁 仓库: \`${{ github.repository }}\`\n\
+🕒 更新时间（UTC）: $(date -u +'%Y-%m-%d %H:%M:%S')\n\
+📝 *最新修改摘要（README.md）*: \n\`\`\`\n${{ steps.diff.outputs.diff }}\n\`\`\`\n\
+✅ 运行状态: *成功*"
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+            -d text="$MESSAGE" \
+            -d parse_mode="Markdown"
+
+      # -----------------------------
+      # Telegram 推送失败消息
+      # -----------------------------
+      - name: Send Telegram Failure Notification
+        if: failure()
+        run: |
+          MESSAGE="❌ *GitHub Actions 运行失败！*\n\n\
+📁 仓库: \`${{ github.repository }}\`\n\
+⚠️ *失败步骤:* Workflow 执行时出现错误\n\
+请前往 GitHub Actions 详情页面查看日志。"
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+            -d text="$MESSAGE" \
+            -d parse_mode="Markdown"
