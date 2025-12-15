@@ -1,4 +1,6 @@
-
+⚠️ 请确保 Secrets 中已经设置：
+TG_BOT_TOKEN
+TG_CHAT_ID
 ---
 
 
