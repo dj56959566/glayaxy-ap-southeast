@@ -1,8 +1,8 @@
-name: Daily Update
+name: 🌅 Daily Update
 
 on:
   schedule:
-    - cron: '5 1 * * *'  # 每天早上北京时间09:05更新(UTC时间为1:05)
+    - cron: '5 1 * * *'  # 每天早上北京时间 09:05
   workflow_dispatch:
   push:
     branches: [main]
@@ -14,41 +14,50 @@ jobs:
       contents: write
     
     steps:
-      - name: Checkout
+      - name: 🛎 Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Update README with timestamp
+
+      - name: 📝 Update README timestamp
         run: |
+          # 生成时间
           UTC_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')
           BJ_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
-          
-          TIMESTAMP_SECTION="\n## 🕒 Last Updated\n\n"
-          TIMESTAMP_SECTION+="**UTC**: \`$UTC_TIME\`  \n"
-          TIMESTAMP_SECTION+="**Beijing Time**: \`$BJ_TIME\`  \n\n"
-          TIMESTAMP_SECTION+="> ⚡ Timestamp auto-updated by GitHub Actions\n"
-          
-          if grep -q "## 🕒 Last Updated" README.md; then
-            sed -i '/## 🕒 Last Updated/,/^## \|^# /{//!d}' README.md
-            sed -i '/## 🕒 Last Updated/d' README.md
+
+          # 写入环境变量供后续步骤使用
+          echo "UTC_TIME=$UTC_TIME" >> $GITHUB_ENV
+          echo "BJ_TIME=$BJ_TIME" >> $GITHUB_ENV
+
+          # 构造时间戳内容
+          TIMESTAMP_SECTION="\n## 🕒 最后更新时间\n\n"
+          TIMESTAMP_SECTION+="**UTC 时间**: \`$UTC_TIME\`  \n"
+          TIMESTAMP_SECTION+="**北京时间**: \`$BJ_TIME\`  \n\n"
+          TIMESTAMP_SECTION+="> ⚡ 时间戳由 GitHub Actions 自动更新\n"
+
+          # 删除旧时间戳部分
+          if grep -q "## 🕒 最后更新时间" README.md; then
+            sed -i '/## 🕒 最后更新时间/,/^## \|^# /{//!d}' README.md
+            sed -i '/## 🕒 最后更新时间/d' README.md
           fi
-          
+
+          # 追加新时间戳
           echo -e "$TIMESTAMP_SECTION" >> README.md
 
-      - name: Auto commit changes
+      - name: 📦 Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Auto deploy by Github Actions"
+          commit_message: "Auto update by GitHub Actions 🚀"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           file_pattern: README.md
 
-      - name: Send Telegram Notification
+      - name: 📢 Send Telegram Notification
+        if: success()
         run: |
-          MESSAGE="📢 *GitHub Actions Update*\n\nRepository: \`${{ github.repository }}\`\n⏱ Update Time (UTC): $(date -u +'%Y-%m-%d %H:%M:%S')\n⚡ README timestamp updated automatically."
-          
+          MESSAGE="🟦 *GitHub Actions - 自动更新完成*%0A%0A🕒 *更新时间：*%0A• *UTC：* ${UTC_TIME}%0A• *北京时间：* ${BJ_TIME}%0A%0A📁 *仓库：*%0Ahttps://github.com/${{ github.repository }}"
+
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TG_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TG_CHAT_ID }}" \
-            -d text="$MESSAGE" \
-            -d parse_mode="Markdown"
+               -d chat_id="${{ secrets.TG_CHAT_ID }}" \
+               -d parse_mode="Markdown" \
+               -d text="$MESSAGE"
